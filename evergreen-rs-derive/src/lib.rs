@@ -16,14 +16,14 @@ pub fn evg_fields(input: proc_macro::TokenStream) -> proc_macro::TokenStream
     // Used in the quasi-quotation below as `#name`.
     let name = input.ident;
 
-    // Generate an expression to sum up the heap size of each field.
-    let sum = evg_fields_impl(&input.data);
+    // Generate an expression to add fields to a vector
+    let add_fields = evg_fields_impl(&input.data);
 
     let expanded = quote! {
         // The generated impl.
         impl evergreen_rs_types::EvgFields for #name {
-            fn evg_fields(&self) -> Vec<String> {
-                vec!{#sum}
+            fn evg_fields_nested(&self, prefix: &str, out: &mut Vec<String>) {
+                #add_fields
             }
         }
     };
@@ -55,11 +55,11 @@ fn evg_fields_impl(data: &Data) -> TokenStream {
                         let name = &f.ident;
                         let name_str = name.as_ref().unwrap().to_string();
                         quote_spanned! {f.span()=>
-                            #name_str.to_string()
+                            out.push(evergreen_rs_types::make_name(prefix, #name_str)) ;
                         }
                     });
                     quote! {
-                        #(#recurse),*
+                        #(#recurse)*
                     }
                 }
                 Fields::Unnamed(ref _fields) => {

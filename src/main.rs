@@ -21,8 +21,9 @@ use std::string::String;
 use structopt::StructOpt;
 
 use json::JsonValue;
+use regex::Regex;
 
-use log::{info, warn};
+use log::info;
 
 use evergreen_rs_derive::EvgFields;
 
@@ -168,13 +169,11 @@ struct Cli {
     )]
     output: OutputType,
 
-    // /// Args to run command with
-    // #[structopt(last = true)]
-    // cmd_args: Vec<String>,
-    #[structopt(long, parse(try_from_str), default_value = "false")]
+    // Display only the URL
+    #[structopt(long)]
     url: bool,
 
-    // List of fields to output, otherwise all fields
+    // List of entries for hosts to display matching a regex
     #[structopt(short, long)]
     filter: Option<String>,
 }
@@ -203,7 +202,6 @@ fn to_flat_json_int(v: &JsonValue, prefix: &str, writer: &mut dyn Write) -> Resu
                 } else {
                     to_flat_json_int(&field.1, &format!("{}.{}", prefix, field.0), writer)?;
                 }
-                //                write!(writer, "{}:{}\n", prefix, field)?;
             }
         }
         JsonValue::Array(arr) => {
@@ -213,7 +211,6 @@ fn to_flat_json_int(v: &JsonValue, prefix: &str, writer: &mut dyn Write) -> Resu
                 } else {
                     to_flat_json_int(member, &format!("{}.{}", prefix, i), writer)?;
                 }
-                //                write!(writer, "{}:{}\n", i, member.as_str().unwrap())?;
             }
         }
     }
@@ -238,14 +235,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let hosts = client.get_hosts(Option::None)?;
 
+    let mut filter: Option<Regex> = Option::None;
+    if let Some(filt) = args.filter {
+        filter = Some(Regex::new(&filt)?);
+    }
+
     for host in hosts {
+        let flat = to_flat_json(&serde_json::to_string_pretty(&host)?)?;
+
+        if let Some(filt) = filter.as_ref() {
+            if !filt.is_match(&flat) {
+                continue;
+            }
+        }
+
         match args.url {
             true => {
                 println!("{}@{}", host.user, host.host_url);
             }
             false => match args.output {
                 OutputType::Flat => {
-                    println!("{}", to_flat_json(&serde_json::to_string_pretty(&host)?)?);
+                    println!("{}", flat);
                 }
                 OutputType::Json => {
                     println!("{}", serde_json::to_string_pretty(&host)?);
